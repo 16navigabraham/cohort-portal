@@ -5,7 +5,7 @@ import { uploadBuffer } from '../services/cloudinary.js'
 import { authenticate, requireStudent } from '../middleware/auth.js'
 
 const router = Router()
-const upload = multer({ storage: multer.memoryStorage() })
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } })
 
 router.use(authenticate, requireStudent)
 
@@ -114,20 +114,42 @@ router.post('/assessments/:id/submit', async (req, res) => {
   const { id: assessmentId } = req.params
   const { answers } = req.body
   if (!answers) return res.status(400).json({ error: 'answers required' })
+  try {
+    const assessment = await prisma.assessment.findUnique({ where: { id: assessmentId } })
+    if (!assessment) return res.status(404).json({ error: 'Assessment not found' })
+    if (assessment.cohortId !== req.user.cohortId) return res.status(403).json({ error: 'Not in your cohort' })
 
-  const assessment = await prisma.assessment.findUnique({ where: { id: assessmentId } })
-  if (!assessment) return res.status(404).json({ error: 'Assessment not found' })
-  if (assessment.cohortId !== req.user.cohortId) return res.status(403).json({ error: 'Not in your cohort' })
+    const existing = await prisma.assessmentResult.findUnique({
+      where: { studentId_assessmentId: { studentId: req.user.id, assessmentId } }
+    })
+    if (existing) return res.status(409).json({ error: 'Already submitted' })
 
-  const existing = await prisma.assessmentResult.findUnique({
-    where: { studentId_assessmentId: { studentId: req.user.id, assessmentId } }
-  })
-  if (existing) return res.status(409).json({ error: 'Already submitted' })
+    const result = await prisma.assessmentResult.create({
+      data: { studentId: req.user.id, assessmentId, answers }
+    })
+    res.status(201).json(result)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
 
-  const result = await prisma.assessmentResult.create({
-    data: { studentId: req.user.id, assessmentId, answers }
-  })
-  res.status(201).json(result)
+router.post('/assessments/:id/submit-file', upload.single('file'), async (req, res) => {
+  const { id: assessmentId } = req.params
+  if (!req.file) return res.status(400).json({ error: 'file required' })
+  try {
+    const assessment = await prisma.assessment.findUnique({ where: { id: assessmentId } })
+    if (!assessment) return res.status(404).json({ error: 'Assessment not found' })
+    if (assessment.cohortId !== req.user.cohortId) return res.status(403).json({ error: 'Not in your cohort' })
+
+    const existing = await prisma.assessmentResult.findUnique({
+      where: { studentId_assessmentId: { studentId: req.user.id, assessmentId } }
+    })
+    if (existing) return res.status(409).json({ error: 'Already submitted' })
+
+    const cloudResult = await uploadBuffer(req.file.buffer, { folder: 'academic-portal/assessment-answers', resource_type: 'auto' })
+    const result = await prisma.assessmentResult.create({
+      data: { studentId: req.user.id, assessmentId, answers: cloudResult.secure_url }
+    })
+    res.status(201).json(result)
+  } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
 // ── Grades ────────────────────────────────────────────────────

@@ -1,8 +1,8 @@
 # Academic Portal — API Reference
 
-Base URL: `http://localhost:3012` (dev) or your deployed URL.
+**Base URL:** `http://localhost:3012` (dev) or your deployed URL
 
-All protected routes require:
+All protected routes require this header:
 ```
 Authorization: Bearer <token>
 ```
@@ -12,45 +12,104 @@ Authorization: Bearer <token>
 ## Authentication
 
 ### POST `/auth/login`
-Login for all users (students, admins, super admin).
 
-**Body**
-```json
-{ "email": "string", "password": "string" }
-```
-> Student password = first name (lowercase). Admin password = first name (lowercase).
+Login for all users — students, course admins, and super admin.
 
-**Response**
+> Student default password = first name in lowercase (e.g. `john`).
+> Admin default password = first name in lowercase.
+
+**Request**
 ```json
 {
-  "token": "jwt_token",
-  "user": { "id": "", "name": "", "email": "", "role": "STUDENT | ADMIN" }
+  "email": "john.doe@web3nova.org",
+  "password": "john"
+}
+```
+
+**Response `200`**
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "id": "clx1a2b3c4d5e6f7g8h9",
+    "name": "John Doe",
+    "email": "john.doe@web3nova.org",
+    "role": "STUDENT"
+  }
+}
+```
+
+**Errors**
+| Status | Body |
+|--------|------|
+| `400` | `{ "error": "Email and password required" }` |
+| `401` | `{ "error": "Invalid credentials" }` |
+
+---
+
+## Admin Routes
+
+**Prefix:** `/admin` · Requires `ADMIN` role JWT.
+
+| Admin type | `courseId` in token | Access |
+|------------|---------------------|--------|
+| Super admin | `null` | All cohorts, all courses |
+| Course admin (tutor) | set | Own course only |
+
+---
+
+### Cohorts
+
+> Super admin only.
+
+#### POST `/admin/cohorts`
+
+**Request**
+```json
+{
+  "name": "Cohort III",
+  "startDate": "2026-05-07",
+  "endDate": "2026-08-07"
+}
+```
+
+**Response `201`**
+```json
+{
+  "id": "clx1a2b3c4d5e6f7g8h9",
+  "name": "Cohort III",
+  "startDate": "2026-05-07T00:00:00.000Z",
+  "endDate": "2026-08-07T00:00:00.000Z",
+  "createdAt": "2026-05-07T10:00:00.000Z"
 }
 ```
 
 ---
 
-## Admin Routes
-Prefix: `/admin` — requires ADMIN role JWT.
+#### GET `/admin/cohorts`
 
-Super admin = no `courseId` in token (founder/devs).
-Course admin = has `courseId` (tutors, scoped to their course).
-
----
-
-### Cohorts *(super admin only)*
-
-#### POST `/admin/cohorts`
+**Response `200`**
 ```json
-{ "name": "Cohort III", "startDate": "2026-05-07", "endDate": "2026-08-07" }
+[
+  {
+    "id": "clx1a2b3c4d5e6f7g8h9",
+    "name": "Cohort III",
+    "startDate": "2026-05-07T00:00:00.000Z",
+    "endDate": "2026-08-07T00:00:00.000Z",
+    "createdAt": "2026-05-07T10:00:00.000Z",
+    "_count": {
+      "students": 45,
+      "courses": 5
+    }
+  }
+]
 ```
 
-#### GET `/admin/cohorts`
-Returns all cohorts with student and course counts.
-
 ---
 
-### Courses *(super admin only)*
+### Courses
+
+> Super admin only.
 
 Valid course names:
 - `ZK, Rust & Protocol`
@@ -60,24 +119,82 @@ Valid course names:
 - `Web Development`
 
 #### POST `/admin/courses`
+
+**Request**
 ```json
-{ "name": "Web Development", "cohortId": "string" }
+{
+  "name": "Web Development",
+  "cohortId": "clx1a2b3c4d5e6f7g8h9"
+}
 ```
 
-#### POST `/admin/courses/seed/:cohortId`
-Creates all 5 courses for a cohort in one request.
-
-#### GET `/admin/courses`
-Query: `?cohortId=` (optional filter)
+**Response `201`**
+```json
+{
+  "id": "clx9z8y7x6w5v4u3t2s1",
+  "name": "Web Development",
+  "cohortId": "clx1a2b3c4d5e6f7g8h9",
+  "createdAt": "2026-05-07T10:00:00.000Z"
+}
+```
 
 ---
 
-### Admins *(super admin only)*
+#### POST `/admin/courses/seed/:cohortId`
+
+Creates all 5 courses for a cohort in one request. Safe to call multiple times (upsert).
+
+**Response `201`** — array of all 5 course objects.
+
+---
+
+#### GET `/admin/courses`
+
+**Query params:** `?cohortId=clx1a2b3c4d5e6f7g8h9` (optional)
+
+**Response `200`**
+```json
+[
+  {
+    "id": "clx9z8y7x6w5v4u3t2s1",
+    "name": "Web Development",
+    "cohortId": "clx1a2b3c4d5e6f7g8h9",
+    "createdAt": "2026-05-07T10:00:00.000Z",
+    "_count": {
+      "students": 12,
+      "admins": 1
+    }
+  }
+]
+```
+
+---
+
+### Admins
+
+> Super admin only.
 
 #### POST `/admin/admins`
-Creates a course admin (tutor). Password defaults to their first name (lowercase).
+
+Creates a course admin (tutor). Default password is their first name (lowercase).
+
+**Request**
 ```json
-{ "name": "string", "email": "string", "courseId": "string" }
+{
+  "name": "Tunde Adeyemi",
+  "email": "tunde@web3nova.org",
+  "courseId": "clx9z8y7x6w5v4u3t2s1"
+}
+```
+
+**Response `201`**
+```json
+{
+  "id": "clxabc123def456ghi789",
+  "name": "Tunde Adeyemi",
+  "email": "tunde@web3nova.org",
+  "courseId": "clx9z8y7x6w5v4u3t2s1"
+}
 ```
 
 ---
@@ -85,182 +202,578 @@ Creates a course admin (tutor). Password defaults to their first name (lowercase
 ### Students
 
 #### POST `/admin/students`
-```json
-{ "name": "string", "email": "string", "cohortId": "string", "courseId": "string" }
-```
 
-#### POST `/admin/students/bulk`
+**Request**
 ```json
 {
-  "cohortId": "string",
-  "courseId": "string",
+  "name": "Jane Okonkwo",
+  "email": "jane@web3nova.org",
+  "cohortId": "clx1a2b3c4d5e6f7g8h9",
+  "courseId": "clx9z8y7x6w5v4u3t2s1"
+}
+```
+
+**Response `201`**
+```json
+{
+  "id": "clxstu001002003004005",
+  "name": "Jane Okonkwo",
+  "email": "jane@web3nova.org",
+  "cohortId": "clx1a2b3c4d5e6f7g8h9",
+  "courseId": "clx9z8y7x6w5v4u3t2s1"
+}
+```
+
+---
+
+#### POST `/admin/students/bulk`
+
+**Request**
+```json
+{
+  "cohortId": "clx1a2b3c4d5e6f7g8h9",
+  "courseId": "clx9z8y7x6w5v4u3t2s1",
   "students": [
-    { "name": "string", "email": "string" }
+    { "name": "Jane Okonkwo", "email": "jane@web3nova.org" },
+    { "name": "Emeka Nwosu",  "email": "emeka@web3nova.org" }
   ]
 }
 ```
-**Response**
+
+**Response `201`**
 ```json
-{ "created": [...], "failed": [...] }
+{
+  "created": [
+    { "id": "clxstu001", "name": "Jane Okonkwo", "email": "jane@web3nova.org" },
+    { "id": "clxstu002", "name": "Emeka Nwosu",  "email": "emeka@web3nova.org" }
+  ],
+  "failed": []
+}
 ```
 
+Failed entries include a `reason` field (e.g. duplicate email):
+```json
+{
+  "failed": [
+    { "name": "Jane Okonkwo", "email": "jane@web3nova.org", "reason": "Unique constraint failed on email" }
+  ]
+}
+```
+
+---
+
 #### GET `/admin/students`
-Query: `?cohortId=` (optional filter). Course admins only see their course students.
+
+**Query params:** `?cohortId=` (optional). Course admins only see students in their course.
+
+**Response `200`**
+```json
+[
+  {
+    "id": "clxstu001",
+    "name": "Jane Okonkwo",
+    "email": "jane@web3nova.org",
+    "cohortId": "clx1a2b3c4d5e6f7g8h9",
+    "courseId": "clx9z8y7x6w5v4u3t2s1",
+    "createdAt": "2026-05-07T10:00:00.000Z"
+  }
+]
+```
 
 ---
 
 ### Materials
 
 #### POST `/admin/materials`
-`multipart/form-data`
 
-| Field | Type |
-|-------|------|
-| `file` | File |
-| `title` | string |
-| `type` | string (e.g. `pdf`, `video`, `link`) |
-| `cohortId` | string |
-| `courseId` | string |
+`Content-Type: multipart/form-data`
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `file` | File | Any format |
+| `title` | string | Display name |
+| `type` | string | e.g. `pdf`, `video`, `slide` |
+| `cohortId` | string | |
+| `courseId` | string | |
+
+**Response `201`**
+```json
+{
+  "id": "clxmat001",
+  "title": "Week 1 Slides",
+  "cloudinaryUrl": "https://res.cloudinary.com/dvagunlxh/raw/upload/v1/academic-portal/materials/week1.pdf",
+  "publicId": "academic-portal/materials/week1",
+  "type": "pdf",
+  "cohortId": "clx1a2b3c4d5e6f7g8h9",
+  "courseId": "clx9z8y7x6w5v4u3t2s1",
+  "uploadedAt": "2026-05-07T10:00:00.000Z"
+}
+```
+
+---
 
 #### DELETE `/admin/materials/:id`
+
+**Response `200`**
+```json
+{ "message": "Deleted" }
+```
 
 ---
 
 ### Attendance Sessions
 
 #### POST `/admin/attendance/sessions`
-Opens a new session (closes any active one for the same cohort/course).
+
+Opens a new session and closes any currently active session for the same cohort + course.
+
+**Request**
 ```json
-{ "cohortId": "string", "courseId": "string", "date": "2026-05-07", "allowedIp": "192.168.1.1" }
+{
+  "cohortId": "clx1a2b3c4d5e6f7g8h9",
+  "courseId": "clx9z8y7x6w5v4u3t2s1",
+  "date": "2026-05-07",
+  "allowedIp": "192.168.1.1"
+}
 ```
 
+**Response `201`**
+```json
+{
+  "id": "clxsess001",
+  "cohortId": "clx1a2b3c4d5e6f7g8h9",
+  "courseId": "clx9z8y7x6w5v4u3t2s1",
+  "date": "2026-05-07T00:00:00.000Z",
+  "allowedIp": "192.168.1.1",
+  "active": true,
+  "createdAt": "2026-05-07T09:00:00.000Z"
+}
+```
+
+---
+
 #### PATCH `/admin/attendance/sessions/:id/close`
-Closes a session manually.
+
+**Response `200`** — updated session object with `"active": false`.
+
+---
 
 #### GET `/admin/attendance/sessions`
-Query: `?cohortId=`
+
+**Query params:** `?cohortId=` (optional)
+
+**Response `200`**
+```json
+[
+  {
+    "id": "clxsess001",
+    "date": "2026-05-07T00:00:00.000Z",
+    "allowedIp": "192.168.1.1",
+    "active": false,
+    "_count": { "attendances": 23 }
+  }
+]
+```
+
+---
 
 #### GET `/admin/attendance`
-Query: `?cohortId=` `?sessionId=`
-Returns attendance records with student name and email.
+
+**Query params:** `?cohortId=` `?sessionId=` (both optional)
+
+**Response `200`**
+```json
+[
+  {
+    "id": "clxatt001",
+    "studentId": "clxstu001",
+    "sessionId": "clxsess001",
+    "date": "2026-05-07T00:00:00.000Z",
+    "status": "PRESENT",
+    "ip": "192.168.1.45",
+    "student": {
+      "name": "Jane Okonkwo",
+      "email": "jane@web3nova.org"
+    }
+  }
+]
+```
 
 ---
 
 ### Assignments
 
 #### POST `/admin/assignments`
+
+**Request**
 ```json
-{ "title": "string", "description": "string", "dueDate": "2026-05-14", "cohortId": "string", "courseId": "string" }
+{
+  "title": "Build a REST API",
+  "description": "Create a fully functional REST API using Express.js with at least 5 endpoints.",
+  "dueDate": "2026-05-21",
+  "cohortId": "clx1a2b3c4d5e6f7g8h9",
+  "courseId": "clx9z8y7x6w5v4u3t2s1"
+}
 ```
+
+**Response `201`**
+```json
+{
+  "id": "clxasgn001",
+  "title": "Build a REST API",
+  "description": "Create a fully functional REST API...",
+  "dueDate": "2026-05-21T00:00:00.000Z",
+  "cohortId": "clx1a2b3c4d5e6f7g8h9",
+  "courseId": "clx9z8y7x6w5v4u3t2s1",
+  "createdAt": "2026-05-07T10:00:00.000Z"
+}
+```
+
+---
 
 #### GET `/admin/assignments/:id/submissions`
-Returns all submissions for an assignment with student info.
+
+**Response `200`**
+```json
+[
+  {
+    "id": "clxsub001",
+    "studentId": "clxstu001",
+    "cloudinaryUrl": "https://res.cloudinary.com/dvagunlxh/raw/upload/v1/academic-portal/submissions/project.zip",
+    "submittedAt": "2026-05-20T14:30:00.000Z",
+    "grade": null,
+    "feedback": null,
+    "student": {
+      "name": "Jane Okonkwo",
+      "email": "jane@web3nova.org"
+    }
+  }
+]
+```
+
+---
 
 #### PATCH `/admin/submissions/:id/grade`
+
+**Request**
 ```json
-{ "grade": 85, "feedback": "Good work." }
+{
+  "grade": 85,
+  "feedback": "Good structure. Clean code."
+}
 ```
+
+**Response `200`** — updated submission object.
 
 ---
 
 ### Assessments
 
 #### POST `/admin/assessments`
+
+**Request**
 ```json
 {
-  "title": "string",
-  "type": "TEST | EXAM",
-  "cohortId": "string",
-  "courseId": "string",
+  "title": "Week 3 Quiz",
+  "type": "TEST",
+  "cohortId": "clx1a2b3c4d5e6f7g8h9",
+  "courseId": "clx9z8y7x6w5v4u3t2s1",
   "dueDate": "2026-05-14",
   "questions": [
-    { "q": "What is a smart contract?", "options": ["A", "B", "C", "D"], "answer": "A" }
+    {
+      "q": "What does REST stand for?",
+      "options": ["Representational State Transfer", "Remote Execution Service Tool", "Request Send Transfer", "None"],
+      "answer": "Representational State Transfer"
+    }
   ]
 }
 ```
 
-#### GET `/admin/assessments/:id/results`
-Returns all student submissions for an assessment.
-
-#### PATCH `/admin/assessments/results/:id/score`
+**Response `201`**
 ```json
-{ "score": 90 }
+{
+  "id": "clxassmt001",
+  "title": "Week 3 Quiz",
+  "type": "TEST",
+  "cohortId": "clx1a2b3c4d5e6f7g8h9",
+  "courseId": "clx9z8y7x6w5v4u3t2s1",
+  "dueDate": "2026-05-14T00:00:00.000Z",
+  "questions": "[{\"q\":\"What does REST stand for?\",...}]",
+  "createdAt": "2026-05-07T10:00:00.000Z"
+}
+```
+
+> `questions` is stored as a JSON string. Parse it on the frontend with `JSON.parse()`.
+
+---
+
+#### GET `/admin/assessments/:id/results`
+
+**Response `200`**
+```json
+[
+  {
+    "id": "clxres001",
+    "studentId": "clxstu001",
+    "answers": "{\"0\":\"Representational State Transfer\"}",
+    "score": null,
+    "submittedAt": "2026-05-14T11:00:00.000Z",
+    "student": {
+      "name": "Jane Okonkwo",
+      "email": "jane@web3nova.org"
+    }
+  }
+]
 ```
 
 ---
 
-## Student Routes
-Prefix: `/student` — requires STUDENT role JWT.
+#### PATCH `/admin/assessments/results/:id/score`
 
-All student endpoints are automatically scoped to the student's `cohortId` and `courseId`.
+**Request**
+```json
+{ "score": 90 }
+```
+
+**Response `200`** — updated result object.
+
+---
+
+## Student Routes
+
+**Prefix:** `/student` · Requires `STUDENT` role JWT.
+
+All endpoints are automatically scoped to the student's own `cohortId` and `courseId` from the token.
 
 ---
 
 ### Materials
 
 #### GET `/student/materials`
-Returns all materials for the student's cohort and course, newest first.
+
+**Response `200`**
+```json
+[
+  {
+    "id": "clxmat001",
+    "title": "Week 1 Slides",
+    "cloudinaryUrl": "https://res.cloudinary.com/dvagunlxh/raw/upload/v1/academic-portal/materials/week1.pdf",
+    "type": "pdf",
+    "cohortId": "clx1a2b3c4d5e6f7g8h9",
+    "courseId": "clx9z8y7x6w5v4u3t2s1",
+    "uploadedAt": "2026-05-07T10:00:00.000Z"
+  }
+]
+```
 
 ---
 
 ### Attendance
 
 #### POST `/student/attendance/check-in`
-Student must be on the class network (IP validated against the active session).
-No body required — uses the student's IP and JWT identity.
+
+No body required. Student must be on the class network (IP is validated server-side).
+
+**Response `201`**
+```json
+{
+  "message": "Checked in successfully",
+  "record": {
+    "id": "clxatt001",
+    "studentId": "clxstu001",
+    "sessionId": "clxsess001",
+    "date": "2026-05-07T00:00:00.000Z",
+    "status": "PRESENT",
+    "ip": "192.168.1.45"
+  }
+}
+```
 
 **Errors**
-- `404` No active session
-- `403` Wrong network
-- `409` Already checked in
+| Status | Body |
+|--------|------|
+| `404` | `{ "error": "No active attendance session for your cohort" }` |
+| `403` | `{ "error": "You must be on the class network to check in" }` |
+| `409` | `{ "error": "Already checked in for this session" }` |
+
+---
 
 #### GET `/student/attendance`
-Returns the student's full attendance history.
+
+**Response `200`**
+```json
+[
+  {
+    "id": "clxatt001",
+    "date": "2026-05-07T00:00:00.000Z",
+    "status": "PRESENT",
+    "session": {
+      "date": "2026-05-07T00:00:00.000Z",
+      "active": false
+    }
+  }
+]
+```
 
 ---
 
 ### Assignments
 
 #### GET `/student/assignments`
-Returns assignments for the student's cohort and course, ordered by due date.
+
+**Response `200`**
+```json
+[
+  {
+    "id": "clxasgn001",
+    "title": "Build a REST API",
+    "description": "Create a fully functional REST API...",
+    "dueDate": "2026-05-21T00:00:00.000Z",
+    "cohortId": "clx1a2b3c4d5e6f7g8h9",
+    "courseId": "clx9z8y7x6w5v4u3t2s1",
+    "createdAt": "2026-05-07T10:00:00.000Z"
+  }
+]
+```
+
+---
 
 #### POST `/student/assignments/:id/submit`
-`multipart/form-data`
+
+`Content-Type: multipart/form-data`
 
 | Field | Type |
 |-------|------|
 | `file` | File (any type) |
+
+**Response `201`**
+```json
+{
+  "id": "clxsub001",
+  "studentId": "clxstu001",
+  "assignmentId": "clxasgn001",
+  "cloudinaryUrl": "https://res.cloudinary.com/dvagunlxh/raw/upload/v1/academic-portal/submissions/project.zip",
+  "publicId": "academic-portal/submissions/project",
+  "submittedAt": "2026-05-20T14:30:00.000Z",
+  "grade": null,
+  "feedback": null
+}
+```
+
+**Errors**
+| Status | Body |
+|--------|------|
+| `400` | `{ "error": "File required" }` |
+| `404` | `{ "error": "Assignment not found" }` |
+| `409` | `{ "error": "Already submitted" }` |
 
 ---
 
 ### Assessments
 
 #### GET `/student/assessments`
-Query: `?type=TEST` or `?type=EXAM` (optional filter).
-Returns `id`, `title`, `type`, `dueDate` — **questions are not included**.
+
+**Query params:** `?type=TEST` or `?type=EXAM` (optional)
+
+Questions are **not** returned here — use the single assessment endpoint to get them.
+
+**Response `200`**
+```json
+[
+  {
+    "id": "clxassmt001",
+    "title": "Week 3 Quiz",
+    "type": "TEST",
+    "dueDate": "2026-05-14T00:00:00.000Z",
+    "createdAt": "2026-05-07T10:00:00.000Z"
+  }
+]
+```
+
+---
 
 #### GET `/student/assessments/:id`
-Returns full assessment including questions. Only accessible if student is in the correct cohort.
+
+Returns full assessment including questions.
+
+**Response `200`**
+```json
+{
+  "id": "clxassmt001",
+  "title": "Week 3 Quiz",
+  "type": "TEST",
+  "dueDate": "2026-05-14T00:00:00.000Z",
+  "questions": "[{\"q\":\"What does REST stand for?\",\"options\":[...],\"answer\":\"...\"}]"
+}
+```
+
+> Parse `questions` with `JSON.parse()`.
+
+---
 
 #### POST `/student/assessments/:id/submit`
+
+**Request**
 ```json
-{ "answers": { "0": "A", "1": "C" } }
+{
+  "answers": { "0": "Representational State Transfer", "1": "GET" }
+}
 ```
-`answers` can be any JSON structure (object or array).
+
+`answers` can be any JSON — object or array.
+
+**Response `201`**
+```json
+{
+  "id": "clxres001",
+  "studentId": "clxstu001",
+  "assessmentId": "clxassmt001",
+  "answers": "{\"0\":\"Representational State Transfer\",\"1\":\"GET\"}",
+  "score": null,
+  "submittedAt": "2026-05-14T11:00:00.000Z"
+}
+```
+
+**Errors**
+| Status | Body |
+|--------|------|
+| `400` | `{ "error": "answers required" }` |
+| `403` | `{ "error": "Not in your cohort" }` |
+| `409` | `{ "error": "Already submitted" }` |
 
 ---
 
 ### Grades
 
 #### GET `/student/grades`
-Returns all graded work.
+
+**Response `200`**
 ```json
 {
   "assignments": [
-    { "cloudinaryUrl": "", "grade": 85, "feedback": "", "assignment": { "title": "", "dueDate": "" } }
+    {
+      "id": "clxsub001",
+      "cloudinaryUrl": "https://res.cloudinary.com/...",
+      "submittedAt": "2026-05-20T14:30:00.000Z",
+      "grade": 85,
+      "feedback": "Good structure. Clean code.",
+      "assignment": {
+        "title": "Build a REST API",
+        "dueDate": "2026-05-21T00:00:00.000Z"
+      }
+    }
   ],
   "assessments": [
-    { "answers": {}, "score": 90, "assessment": { "title": "", "type": "" } }
+    {
+      "id": "clxres001",
+      "answers": "{\"0\":\"Representational State Transfer\"}",
+      "score": 90,
+      "submittedAt": "2026-05-14T11:00:00.000Z",
+      "assessment": {
+        "title": "Week 3 Quiz",
+        "type": "TEST"
+      }
+    }
   ]
 }
 ```
@@ -269,25 +782,37 @@ Returns all graded work.
 
 ## Token Payload
 
-Decoded JWT contains:
 ```json
 {
-  "id": "user_id",
-  "email": "string",
-  "role": "STUDENT | ADMIN",
-  "cohortId": "string | null",
-  "courseId": "string | null"
+  "id": "clxstu001",
+  "email": "jane@web3nova.org",
+  "role": "STUDENT",
+  "cohortId": "clx1a2b3c4d5e6f7g8h9",
+  "courseId": "clx9z8y7x6w5v4u3t2s1",
+  "iat": 1746612000,
+  "exp": 1747216800
 }
 ```
-Use `role` to render the correct dashboard. Super admin has `courseId: null`.
+
+- `role`: use to decide which dashboard to render (`STUDENT` or `ADMIN`)
+- `courseId: null` on super admin token
+- Token expires in **7 days**
 
 ---
 
 ## Error Format
 
-All errors return:
+All errors follow this shape:
+
 ```json
-{ "error": "message" }
+{ "error": "human-readable message" }
 ```
 
-Common status codes: `400` bad input · `401` unauthenticated · `403` forbidden · `404` not found · `409` conflict (duplicate) · `500` server error.
+| Status | Meaning |
+|--------|---------|
+| `400` | Missing or invalid fields |
+| `401` | No token / invalid token |
+| `403` | Valid token but insufficient permissions |
+| `404` | Resource not found |
+| `409` | Conflict — duplicate submission, already checked in, etc. |
+| `500` | Server error |
