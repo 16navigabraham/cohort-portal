@@ -8,6 +8,7 @@ import { requestLogger, errorLogger } from './src/middleware/logger.js'
 
 const app = express()
 const PORT = process.env.PORT || 3012
+app.set('trust proxy', 1)
 
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000').split(',')
 app.use(cors({
