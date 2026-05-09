@@ -20,6 +20,7 @@ model Cohort {
   assessments        Assessment[]
   attendances        Attendance[]
   attendanceSessions AttendanceSession[]
+  curriculum         Curriculum[]
 }
 
 model Course {
@@ -35,6 +36,7 @@ model Course {
   assignments Assignment[]
   assessments Assessment[]
   sessions    AttendanceSession[]
+  curriculum  Curriculum[]
 
   @@unique([name, cohortId])
 }
@@ -57,6 +59,23 @@ model User {
   attendances       Attendance[]
 }
 
+model Curriculum {
+  id          String   @id @default(cuid())
+  courseId    String
+  cohortId    String
+  week        Int
+  title       String
+  description String?
+  createdAt   DateTime @default(now())
+
+  course     Course     @relation(fields: [courseId], references: [id])
+  cohort     Cohort     @relation(fields: [cohortId], references: [id])
+  assignment Assignment?
+  materials  Material[]
+
+  @@unique([courseId, cohortId, week])
+}
+
 model Material {
   id            String   @id @default(cuid())
   title         String
@@ -65,10 +84,12 @@ model Material {
   type          String
   cohortId      String
   courseId      String
+  curriculumId  String?
   uploadedAt    DateTime @default(now())
 
-  cohort Cohort @relation(fields: [cohortId], references: [id])
-  course Course @relation(fields: [courseId], references: [id])
+  cohort     Cohort      @relation(fields: [cohortId], references: [id])
+  course     Course      @relation(fields: [courseId], references: [id])
+  curriculum Curriculum? @relation(fields: [curriculumId], references: [id])
 }
 
 model AttendanceSession {
@@ -102,28 +123,37 @@ model Attendance {
 }
 
 model Assignment {
-  id          String   @id @default(cuid())
-  title       String
-  description String
-  dueDate     DateTime
-  cohortId    String
-  courseId    String
-  createdAt   DateTime @default(now())
+  id                     String   @id @default(cuid())
+  title                  String
+  description            String
+  questionText           String?
+  questionDocUrl         String?
+  allowedSubmissionTypes String   @default("[\"pdf\",\"doc\",\"url\",\"image\",\"video\",\"code\"]")
+  curriculumId           String   @unique
+  cohortId               String
+  courseId               String
+  openAt                 DateTime
+  closeAt                DateTime
+  createdAt              DateTime @default(now())
 
+  curriculum  Curriculum   @relation(fields: [curriculumId], references: [id])
   cohort      Cohort       @relation(fields: [cohortId], references: [id])
   course      Course       @relation(fields: [courseId], references: [id])
   submissions Submission[]
 }
 
 model Submission {
-  id            String   @id @default(cuid())
-  studentId     String
-  assignmentId  String
-  cloudinaryUrl String
-  publicId      String
-  submittedAt   DateTime @default(now())
-  grade         Int?
-  feedback      String?
+  id             String   @id @default(cuid())
+  studentId      String
+  assignmentId   String
+  submissionType String   @default("file")
+  cloudinaryUrl  String?
+  publicId       String?
+  contentUrl     String?
+  submittedAt    DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  grade          Int?
+  feedback       String?
 
   student    User       @relation(fields: [studentId], references: [id])
   assignment Assignment @relation(fields: [assignmentId], references: [id])
@@ -132,14 +162,16 @@ model Submission {
 }
 
 model Assessment {
-  id        String   @id @default(cuid())
-  title     String
-  type      String
-  cohortId  String
-  courseId  String
-  dueDate   DateTime
-  questions String
-  createdAt DateTime @default(now())
+  id             String   @id @default(cuid())
+  title          String
+  type           String
+  cohortId       String
+  courseId       String
+  dueDate        DateTime
+  questions      String
+  correctAnswers String   @default("[]")
+  questionText   String?
+  createdAt      DateTime @default(now())
 
   cohort  Cohort             @relation(fields: [cohortId], references: [id])
   course  Course             @relation(fields: [courseId], references: [id])
@@ -147,12 +179,17 @@ model Assessment {
 }
 
 model AssessmentResult {
-  id           String   @id @default(cuid())
-  studentId    String
-  assessmentId String
-  answers      String
-  score        Int?
-  submittedAt  DateTime @default(now())
+  id             String   @id @default(cuid())
+  studentId      String
+  assessmentId   String
+  answers        String
+  submissionType String   @default("file")
+  cloudinaryUrl  String?
+  publicId       String?
+  contentUrl     String?
+  score          Int?
+  submittedAt    DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   student    User       @relation(fields: [studentId], references: [id])
   assessment Assessment @relation(fields: [assessmentId], references: [id])

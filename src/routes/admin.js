@@ -4,6 +4,8 @@ import multer from 'multer'
 import { prisma } from '../db.js'
 import { uploadBuffer, deleteFile } from '../services/cloudinary.js'
 import { authenticate, requireAdmin } from '../middleware/auth.js'
+import { parseMCQFile } from '../services/mcq-parser.js'
+import { weekAssignmentWindow } from '../services/curriculum-dates.js'
 
 const router = Router()
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } })
@@ -221,15 +223,137 @@ router.get('/attendance', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
-// ── Assignments ───────────────────────────────────────────────
+// ── Curriculum ────────────────────────────────────────────────
 
-router.post('/assignments', async (req, res) => {
-  const { title, description, dueDate, cohortId, courseId } = req.body
-  if (!title || !description || !dueDate || !cohortId || !courseId) return res.status(400).json({ error: 'title, description, dueDate, cohortId, courseId required' })
-  if (!isSuperAdmin(req) && req.user.courseId !== courseId) return res.status(403).json({ error: 'Not your course' })
+// Seed 12 curriculum weeks for a course in a cohort
+router.post('/curriculum/seed/:cohortId/:courseId', async (req, res) => {
+  if (!isSuperAdmin(req)) return res.status(403).json({ error: 'Super admin only' })
+  const { cohortId, courseId } = req.params
   try {
-    const assignment = await prisma.assignment.create({ data: { title, description, dueDate: new Date(dueDate), cohortId, courseId } })
+    const cohort = await prisma.cohort.findUnique({ where: { id: cohortId } })
+    if (!cohort) return res.status(404).json({ error: 'Cohort not found' })
+    const course = await prisma.course.findUnique({ where: { id: courseId } })
+    if (!course) return res.status(404).json({ error: 'Course not found' })
+
+    const weeks = await Promise.all(
+      Array.from({ length: 12 }, (_, i) => i + 1).map(week =>
+        prisma.curriculum.upsert({
+          where: { courseId_cohortId_week: { courseId, cohortId, week } },
+          update: {},
+          create: { courseId, cohortId, week, title: `Week ${week}` },
+        })
+      )
+    )
+    res.status(201).json(weeks)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+router.get('/curriculum', async (req, res) => {
+  const { cohortId, courseId } = req.query
+  try {
+    const where = {
+      ...(cohortId ? { cohortId } : {}),
+      ...(courseId ? { courseId } : {}),
+      ...courseScope(req),
+    }
+    const weeks = await prisma.curriculum.findMany({
+      where,
+      orderBy: { week: 'asc' },
+      include: {
+        assignment: true,
+        materials: true,
+      },
+    })
+    res.json(weeks)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+router.patch('/curriculum/:id', async (req, res) => {
+  const { title, description } = req.body
+  try {
+    const week = await prisma.curriculum.findUnique({ where: { id: req.params.id } })
+    if (!week) return res.status(404).json({ error: 'Not found' })
+    if (!isSuperAdmin(req) && req.user.courseId !== week.courseId) return res.status(403).json({ error: 'Not your course' })
+    const updated = await prisma.curriculum.update({
+      where: { id: req.params.id },
+      data: { ...(title ? { title } : {}), ...(description !== undefined ? { description } : {}) },
+    })
+    res.json(updated)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ── Assignments (per curriculum week) ────────────────────────
+
+router.post('/curriculum/:id/assignment', upload.single('questionDoc'), async (req, res) => {
+  const { title, description, questionText, allowedSubmissionTypes } = req.body
+  if (!title || !description) return res.status(400).json({ error: 'title and description required' })
+  try {
+    const week = await prisma.curriculum.findUnique({ where: { id: req.params.id }, include: { cohort: true } })
+    if (!week) return res.status(404).json({ error: 'Curriculum week not found' })
+    if (!isSuperAdmin(req) && req.user.courseId !== week.courseId) return res.status(403).json({ error: 'Not your course' })
+
+    const existing = await prisma.assignment.findUnique({ where: { curriculumId: req.params.id } })
+    if (existing) return res.status(409).json({ error: 'Assignment already exists for this week. Use PATCH /admin/assignments/:id to update.' })
+
+    const { openAt, closeAt } = weekAssignmentWindow(week.cohort.startDate, week.week)
+
+    let parsedQuestionText = questionText || null
+    let questionDocUrl = null
+
+    if (req.file) {
+      // Upload original doc to Cloudinary for student download fallback
+      const uploaded = await uploadBuffer(req.file.buffer, { folder: 'academic-portal/question-docs', resource_type: 'raw' })
+      questionDocUrl = uploaded.secure_url
+      // Parse text from doc if no manual text provided
+      if (!parsedQuestionText) {
+        try {
+          const { parseQuestionDoc } = await import('../services/mcq-parser.js')
+          parsedQuestionText = await parseQuestionDoc(req.file.buffer, req.file.mimetype)
+        } catch { /* fallback to doc URL only */ }
+      }
+    }
+
+    const types = allowedSubmissionTypes
+      ? (typeof allowedSubmissionTypes === 'string' ? allowedSubmissionTypes : JSON.stringify(allowedSubmissionTypes))
+      : '["pdf","doc","url","image","video","code"]'
+
+    const assignment = await prisma.assignment.create({
+      data: {
+        title, description, questionText: parsedQuestionText, questionDocUrl,
+        allowedSubmissionTypes: types,
+        curriculumId: req.params.id, cohortId: week.cohortId, courseId: week.courseId, openAt, closeAt,
+      },
+    })
     res.status(201).json(assignment)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+router.patch('/assignments/:id', upload.single('questionDoc'), async (req, res) => {
+  const { title, description, questionText, allowedSubmissionTypes } = req.body
+  try {
+    const assignment = await prisma.assignment.findUnique({ where: { id: req.params.id } })
+    if (!assignment) return res.status(404).json({ error: 'Not found' })
+    if (!isSuperAdmin(req) && req.user.courseId !== assignment.courseId) return res.status(403).json({ error: 'Not your course' })
+
+    const data = {}
+    if (title) data.title = title
+    if (description) data.description = description
+    if (questionText !== undefined) data.questionText = questionText
+    if (allowedSubmissionTypes) data.allowedSubmissionTypes = typeof allowedSubmissionTypes === 'string' ? allowedSubmissionTypes : JSON.stringify(allowedSubmissionTypes)
+
+    if (req.file) {
+      const uploaded = await uploadBuffer(req.file.buffer, { folder: 'academic-portal/question-docs', resource_type: 'raw' })
+      data.questionDocUrl = uploaded.secure_url
+      if (!questionText) {
+        try {
+          const { parseQuestionDoc } = await import('../services/mcq-parser.js')
+          data.questionText = await parseQuestionDoc(req.file.buffer, req.file.mimetype)
+        } catch { /* keep existing */ }
+      }
+    }
+
+    const updated = await prisma.assignment.update({ where: { id: req.params.id }, data })
+    res.json(updated)
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
@@ -237,7 +361,7 @@ router.get('/assignments/:id/submissions', async (req, res) => {
   try {
     const submissions = await prisma.submission.findMany({
       where: { assignmentId: req.params.id },
-      include: { student: { select: { name: true, email: true } } }
+      include: { student: { select: { name: true, email: true } } },
     })
     res.json(submissions)
   } catch (err) { res.status(500).json({ error: err.message }) }
@@ -293,6 +417,27 @@ router.post('/assessments/:id/paper', upload.single('file'), async (req, res) =>
     })
     res.json(updated)
   } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// Upload .csv/.pdf/.docx → parse MCQ questions automatically
+router.post('/assessments/:id/upload-questions', upload.single('file'), async (req, res) => {
+  try {
+    const assessment = await prisma.assessment.findUnique({ where: { id: req.params.id } })
+    if (!assessment) return res.status(404).json({ error: 'Not found' })
+    if (!isSuperAdmin(req) && req.user.courseId !== assessment.courseId) return res.status(403).json({ error: 'Not your course' })
+    if (!req.file) return res.status(400).json({ error: 'file required (.csv, .pdf, or .docx)' })
+
+    const { questions, correctAnswers } = await parseMCQFile(req.file.buffer, req.file.mimetype)
+
+    const updated = await prisma.assessment.update({
+      where: { id: req.params.id },
+      data: {
+        questions: JSON.stringify(questions),
+        correctAnswers: JSON.stringify(correctAnswers),
+      },
+    })
+    res.json({ message: `${questions.length} questions loaded`, assessment: updated })
+  } catch (err) { res.status(400).json({ error: err.message }) }
 })
 
 router.get('/assessments/:id/results', async (req, res) => {
