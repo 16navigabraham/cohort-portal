@@ -43,6 +43,7 @@ export const swaggerSpec = {
     { name: 'Student — Materials' },
     { name: 'Student — Attendance' },
     { name: 'Student — Grades' },
+    { name: 'Payments' },
   ],
   paths: {
 
@@ -811,6 +812,87 @@ export const swaggerSpec = {
         summary: 'Get own attendance history',
         security: secured,
         responses: { 200: { description: 'Attendance records' } },
+      },
+    },
+
+    // ── Payments ─────────────────────────────────────────────────
+    '/payments/status': {
+      get: {
+        tags: ['Payments'],
+        summary: 'Get payment status and what the student can pay',
+        security: secured,
+        responses: {
+          200: {
+            description: 'Current payment record, deadlines, and allowed payment options',
+          },
+        },
+      },
+    },
+    '/payments/initiate': {
+      post: {
+        tags: ['Payments'],
+        summary: 'Initiate a payment — returns Monnify checkout URL',
+        security: secured,
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['paymentType'],
+                properties: {
+                  paymentType: {
+                    type: 'string',
+                    enum: ['full', 'instalment1', 'instalment2'],
+                    example: 'full',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'checkoutUrl, transactionReference, ref' },
+          400: { description: 'Invalid paymentType' },
+          403: { description: 'Payment not allowed at current stage / deadline passed' },
+        },
+      },
+    },
+    '/payments/verify': {
+      post: {
+        tags: ['Payments'],
+        summary: 'Verify payment after returning from Monnify checkout',
+        security: secured,
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['paymentReference'],
+                properties: {
+                  paymentReference: { type: 'string', example: 'MNFY|...' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Payment verified — status and amountPaid updated' },
+          402: { description: 'Payment not confirmed by Monnify' },
+          404: { description: 'No pending payment record found' },
+        },
+      },
+    },
+    '/payments/webhook': {
+      post: {
+        tags: ['Payments'],
+        summary: 'Monnify webhook (called by Monnify, not the frontend)',
+        description: 'No auth required. Monnify posts here on SUCCESSFUL_TRANSACTION events. Validated via HMAC-SHA512 signature header.',
+        responses: {
+          200: { description: 'Acknowledged' },
+          401: { description: 'Invalid Monnify signature' },
+        },
       },
     },
 

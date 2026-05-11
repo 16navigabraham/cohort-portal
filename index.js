@@ -5,6 +5,7 @@ import swaggerUi from 'swagger-ui-express'
 import authRouter from './src/routes/auth.js'
 import adminRouter from './src/routes/admin.js'
 import studentRouter from './src/routes/student.js'
+import paymentsRouter, { buildWebhookHandler } from './src/routes/payments.js'
 import { requestLogger, errorLogger } from './src/middleware/logger.js'
 import { swaggerSpec } from './src/swagger.js'
 
@@ -28,6 +29,8 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec))
 app.use('/auth', authRouter)
 app.use('/admin', adminRouter)
 app.use('/student', studentRouter)
+app.use('/payments', paymentsRouter)
+app.use('/', buildWebhookHandler())
 
 app.get('/health', (_, res) => res.json({ status: 'ok' }))
 
