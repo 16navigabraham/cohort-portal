@@ -8,11 +8,11 @@ import dotenv from 'dotenv'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 dotenv.config({ path: join(__dirname, '..', '.env') })
 
-const url = process.env.DATABASE_URL
+const url = process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL
 const authToken = process.env.TURSO_AUTH_TOKEN
 
 if (!url) {
-  console.error('DATABASE_URL is not set')
+  console.error('TURSO_DATABASE_URL (or DATABASE_URL) is not set')
   process.exit(1)
 }
 
