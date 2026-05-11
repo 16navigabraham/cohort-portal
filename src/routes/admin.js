@@ -91,6 +91,17 @@ router.delete('/admins/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
+router.get('/admins', async (req, res) => {
+  if (!isSuperAdmin(req)) return res.status(403).json({ error: 'Super admin only' })
+  try {
+    const admins = await prisma.user.findMany({
+      where: { role: 'ADMIN' },
+      select: { id: true, name: true, email: true, courseId: true, createdAt: true }
+    })
+    res.json(admins)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
 // ── Students ──────────────────────────────────────────────────
 
 router.post('/students', async (req, res) => {
@@ -175,6 +186,21 @@ router.delete('/materials/:id', async (req, res) => {
     await deleteFile(material.publicId)
     await prisma.material.delete({ where: { id: req.params.id } })
     res.json({ message: 'Deleted' })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+router.get('/materials', async (req, res) => {
+  try {
+    const { cohortId, courseId } = req.query
+    const materials = await prisma.material.findMany({
+      where: {
+        ...(cohortId ? { cohortId } : {}),
+        ...(courseId ? { courseId } : {}),
+        ...courseScope(req),
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+    res.json(materials)
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
@@ -357,6 +383,21 @@ router.patch('/assignments/:id', upload.single('questionDoc'), async (req, res) 
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
+router.get('/assignments', async (req, res) => {
+  try {
+    const { cohortId, courseId } = req.query
+    const assignments = await prisma.assignment.findMany({
+      where: {
+        ...(cohortId ? { cohortId } : {}),
+        ...(courseId ? { courseId } : {}),
+        ...courseScope(req),
+      },
+      orderBy: { openAt: 'desc' }
+    })
+    res.json(assignments)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
 router.get('/assignments/:id/submissions', async (req, res) => {
   try {
     const submissions = await prisma.submission.findMany({
@@ -438,6 +479,21 @@ router.post('/assessments/:id/upload-questions', upload.single('file'), async (r
     })
     res.json({ message: `${questions.length} questions loaded`, assessment: updated })
   } catch (err) { res.status(400).json({ error: err.message }) }
+})
+
+router.get('/assessments', async (req, res) => {
+  try {
+    const { cohortId, courseId } = req.query
+    const assessments = await prisma.assessment.findMany({
+      where: {
+        ...(cohortId ? { cohortId } : {}),
+        ...(courseId ? { courseId } : {}),
+        ...courseScope(req),
+      },
+      orderBy: { dueDate: 'desc' }
+    })
+    res.json(assessments)
+  } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
 router.get('/assessments/:id/results', async (req, res) => {

@@ -373,6 +373,14 @@ Week timeline example (cohort starts Monday 2026-05-07):
 
 ---
 
+#### GET `/admin/assignments`
+
+**Query params:** `?cohortId=` `?courseId=` (both optional). Tutors are auto-scoped to their course.
+
+**Response `200`** — array of assignment objects, ordered by `openAt` descending.
+
+---
+
 #### PATCH `/admin/assignments/:id`
 
 Edit an existing assignment. All fields optional.
@@ -465,6 +473,14 @@ Two assessment types:
 │                  │ Student can edit before due date             │
 └──────────────────┴──────────────────────────────────────────────┘
 ```
+
+---
+
+#### GET `/admin/assessments`
+
+**Query params:** `?cohortId=` `?courseId=` (both optional). Tutors are auto-scoped to their course.
+
+**Response `200`** — array of assessment objects, ordered by `dueDate` descending.
 
 ---
 
@@ -661,6 +677,25 @@ Default password = first name lowercase.
 
 ---
 
+#### GET `/admin/admins`
+
+> Super admin only. Returns all admin/tutor accounts.
+
+**Response `200`**
+```json
+[
+  {
+    "id": "clxabc123",
+    "name": "Tunde Adeyemi",
+    "email": "tunde@web3nova.org",
+    "courseId": "clx9z8y7x6w5v4u3t2s1",
+    "createdAt": "2026-05-07T10:00:00.000Z"
+  }
+]
+```
+
+---
+
 ### Students
 
 #### POST `/admin/students`
@@ -757,6 +792,14 @@ Tutors can only delete students from their own course.
 #### DELETE `/admin/materials/:id`
 
 **Response `200`** `{ "message": "Deleted" }` — also deletes from Cloudinary.
+
+---
+
+#### GET `/admin/materials`
+
+**Query params:** `?cohortId=` `?courseId=` (both optional). Tutors are auto-scoped to their course.
+
+**Response `200`** — array of material objects, ordered by `createdAt` descending.
 
 ---
 
