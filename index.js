@@ -1,10 +1,12 @@
 import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
+import swaggerUi from 'swagger-ui-express'
 import authRouter from './src/routes/auth.js'
 import adminRouter from './src/routes/admin.js'
 import studentRouter from './src/routes/student.js'
 import { requestLogger, errorLogger } from './src/middleware/logger.js'
+import { swaggerSpec } from './src/swagger.js'
 
 const app = express()
 const PORT = process.env.PORT || 3012
@@ -20,6 +22,8 @@ app.use(cors({
 }))
 app.use(express.json())
 app.use(requestLogger)
+
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec))
 
 app.use('/auth', authRouter)
 app.use('/admin', adminRouter)
