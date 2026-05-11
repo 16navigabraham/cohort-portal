@@ -65,22 +65,24 @@ async function migrate() {
     console.log(`  apply ${name}`)
     try {
       await client.executeMultiple(sql)
-      await client.execute({
-        sql: `UPDATE "_prisma_migrations"
-              SET finished_at = datetime('now'), applied_steps_count = 1
-              WHERE id = ?`,
-        args: [id],
-      })
-      ran++
     } catch (err) {
-      await client.execute({
-        sql: `UPDATE "_prisma_migrations"
-              SET logs = ?, rolled_back_at = datetime('now')
-              WHERE id = ?`,
-        args: [err.message, id],
-      })
-      throw new Error(`Migration "${name}" failed: ${err.message}`)
+      const alreadyExists = /already exists/i.test(err.message)
+      if (!alreadyExists) {
+        await client.execute({
+          sql: `UPDATE "_prisma_migrations" SET logs = ?, rolled_back_at = datetime('now') WHERE id = ?`,
+          args: [err.message, id],
+        })
+        throw new Error(`Migration "${name}" failed: ${err.message}`)
+      }
+      console.log(`  note  schema already present, marking as applied`)
     }
+    await client.execute({
+      sql: `UPDATE "_prisma_migrations"
+            SET finished_at = datetime('now'), applied_steps_count = 1
+            WHERE id = ?`,
+      args: [id],
+    })
+    ran++
   }
 
   if (ran === 0) {
