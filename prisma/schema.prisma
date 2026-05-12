@@ -21,6 +21,7 @@ model Cohort {
   attendances        Attendance[]
   attendanceSessions AttendanceSession[]
   curriculum         Curriculum[]
+  payments           Payment[]
 }
 
 model Course {
@@ -37,6 +38,7 @@ model Course {
   assessments Assessment[]
   sessions    AttendanceSession[]
   curriculum  Curriculum[]
+  payments    Payment[]
 
   @@unique([name, cohortId])
 }
@@ -57,6 +59,7 @@ model User {
   submissions       Submission[]
   assessmentResults AssessmentResult[]
   attendances       Attendance[]
+  payment           Payment?
 }
 
 model Curriculum {
@@ -195,4 +198,23 @@ model AssessmentResult {
   assessment Assessment @relation(fields: [assessmentId], references: [id])
 
   @@unique([studentId, assessmentId])
+}
+
+model Payment {
+  id          String   @id @default(cuid())
+  studentId   String   @unique
+  cohortId    String
+  courseId    String
+  status      String   @default("PENDING")
+  amountPaid  Int      @default(0)
+  pendingRef  String?
+  pendingType String?
+  lastPaidAt  DateTime?
+  monnifyRef  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  student User   @relation(fields: [studentId], references: [id])
+  cohort  Cohort @relation(fields: [cohortId], references: [id])
+  course  Course @relation(fields: [courseId], references: [id])
 }

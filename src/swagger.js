@@ -37,6 +37,7 @@ export const swaggerSpec = {
     { name: 'Admin — Students' },
     { name: 'Admin — Materials' },
     { name: 'Admin — Attendance' },
+    { name: 'Admin — Payments' },
     { name: 'Student — Curriculum' },
     { name: 'Student — Assignments' },
     { name: 'Student — Assessments' },
@@ -892,6 +893,102 @@ export const swaggerSpec = {
         responses: {
           200: { description: 'Acknowledged' },
           401: { description: 'Invalid Monnify signature' },
+        },
+      },
+    },
+
+    // ── Admin — Payments ─────────────────────────────────────────
+    '/admin/payments': {
+      get: {
+        tags: ['Admin — Payments'],
+        summary: 'List all payments (admin only)',
+        security: secured,
+        parameters: [
+          {
+            name: 'cohortId',
+            in: 'query',
+            required: false,
+            schema: { type: 'string' },
+            description: 'Filter by cohort ID',
+          },
+          {
+            name: 'courseId',
+            in: 'query',
+            required: false,
+            schema: { type: 'string' },
+            description: 'Filter by course ID',
+          },
+          {
+            name: 'status',
+            in: 'query',
+            required: false,
+            schema: { type: 'string', enum: ['PENDING', 'INSTALMENT_1_PAID', 'COMPLETED'] },
+            description: 'Filter by payment status',
+          },
+        ],
+        responses: {
+          200: {
+            description: 'Array of payment records with student, cohort, and course details',
+          },
+          403: { description: 'Insufficient permissions' },
+        },
+      },
+    },
+    '/admin/payments/summary': {
+      get: {
+        tags: ['Admin — Payments'],
+        summary: 'Get payment statistics and summary (admin only)',
+        security: secured,
+        parameters: [
+          {
+            name: 'cohortId',
+            in: 'query',
+            required: false,
+            schema: { type: 'string' },
+            description: 'Filter by cohort ID',
+          },
+          {
+            name: 'courseId',
+            in: 'query',
+            required: false,
+            schema: { type: 'string' },
+            description: 'Filter by course ID',
+          },
+        ],
+        responses: {
+          200: {
+            description: 'Payment summary with total, completed, pending counts and collection statistics',
+          },
+          403: { description: 'Insufficient permissions' },
+        },
+      },
+    },
+    '/admin/payments/unpaid': {
+      get: {
+        tags: ['Admin — Payments'],
+        summary: 'Get list of unpaid students (admin only)',
+        security: secured,
+        parameters: [
+          {
+            name: 'cohortId',
+            in: 'query',
+            required: false,
+            schema: { type: 'string' },
+            description: 'Filter by cohort ID',
+          },
+          {
+            name: 'courseId',
+            in: 'query',
+            required: false,
+            schema: { type: 'string' },
+            description: 'Filter by course ID',
+          },
+        ],
+        responses: {
+          200: {
+            description: 'Array of students with PENDING payment status',
+          },
+          403: { description: 'Insufficient permissions' },
         },
       },
     },

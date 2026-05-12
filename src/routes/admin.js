@@ -515,4 +515,90 @@ router.patch('/assessments/results/:id/score', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
+// ── Payments ──────────────────────────────────────────────────
+
+/**
+ * GET /admin/payments
+ * Returns all payment records (filtered by course if not super admin)
+ * Query params: cohortId, courseId, status (PENDING, INSTALMENT_1_PAID, COMPLETED)
+ */
+router.get('/payments', async (req, res) => {
+  try {
+    const { cohortId, courseId, status } = req.query
+    const payments = await prisma.payment.findMany({
+      where: {
+        ...(cohortId ? { cohortId } : {}),
+        ...(courseId ? { courseId } : {}),
+        ...(status ? { status } : {}),
+        ...courseScope(req),
+      },
+      include: {
+        student: { select: { name: true, email: true } },
+        cohort: { select: { name: true } },
+        course: { select: { name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+    res.json(payments)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+/**
+ * GET /admin/payments/summary
+ * Returns payment summary statistics for a course/cohort
+ */
+router.get('/payments/summary', async (req, res) => {
+  try {
+    const { cohortId, courseId } = req.query
+    const where = {
+      ...(cohortId ? { cohortId } : {}),
+      ...(courseId ? { courseId } : {}),
+      ...courseScope(req),
+    }
+
+    const payments = await prisma.payment.findMany({ where })
+    const total = payments.length
+    const completed = payments.filter(p => p.status === 'COMPLETED').length
+    const instalment1Paid = payments.filter(p => p.status === 'INSTALMENT_1_PAID').length
+    const pending = payments.filter(p => p.status === 'PENDING').length
+    const totalCollected = payments.reduce((sum, p) => sum + (p.amountPaid || 0), 0)
+
+    res.json({
+      total,
+      completed,
+      instalment1Paid,
+      pending,
+      pendingPercentage: ((pending / total) * 100).toFixed(2),
+      completionPercentage: ((completed / total) * 100).toFixed(2),
+      totalCollected,
+    })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+/**
+ * GET /admin/payments/unpaid
+ * Returns students who haven't paid yet
+ */
+router.get('/payments/unpaid', async (req, res) => {
+  try {
+    const { cohortId, courseId } = req.query
+    const where = {
+      ...(cohortId ? { cohortId } : {}),
+      ...(courseId ? { courseId } : {}),
+      ...courseScope(req),
+    }
+
+    const unpaid = await prisma.payment.findMany({
+      where: { ...where, status: 'PENDING' },
+      include: {
+        student: { select: { name: true, email: true } },
+        cohort: { select: { name: true } },
+        course: { select: { name: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    })
+    res.json(unpaid)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
 export default router
